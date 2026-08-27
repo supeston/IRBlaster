@@ -51,7 +51,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --parallel --build-cache --no-daemon
 
       - name: Prepare APK Asset
         run: |
