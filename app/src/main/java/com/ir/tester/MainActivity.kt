@@ -228,7 +228,8 @@ fun MainAppScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding(), top = 16.dp)
+                .statusBarsPadding()
+                .padding(bottom = innerPadding.calculateBottomPadding())
                 .background(MaterialTheme.colorScheme.background)
         ) {
             AnimatedContent(

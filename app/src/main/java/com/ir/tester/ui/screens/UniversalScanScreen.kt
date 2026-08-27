@@ -242,7 +242,7 @@ private fun BrandSelectStep(
             onValueChange = { searchQuery = it },
             placeholder = {
                 Text(
-                    text = "поиск марки (напр. samsung)...",
+                    text = "поиск марки...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )

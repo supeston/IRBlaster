@@ -245,8 +245,6 @@ private fun GlobalActionStep(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(modifier = Modifier.height(10.dp))
-
                     Text(
                         text = "выключить все ${state.selectedCategory?.displayName ?: ""}".trim(),
                         style = MaterialTheme.typography.headlineMedium,
@@ -260,7 +258,7 @@ private fun GlobalActionStep(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
                         onClick = onToggleScan,
@@ -279,7 +277,7 @@ private fun GlobalActionStep(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = if (state.isScanning) "остановить" else "запустить брутфорс",
+                            text = if (state.isScanning) "остановить" else "забрутить",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -321,7 +319,7 @@ private fun GlobalActionStep(
                     onValueChange = { searchQuery = it },
                     placeholder = {
                         Text(
-                            text = "поиск по очереди...",
+                            text = "поиск марки...",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
