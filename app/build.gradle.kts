@@ -12,8 +12,8 @@ android {
         applicationId = "com.ir.tester"
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,9 +21,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("sharedSigning") {
+            storeFile = file("release.keystore")
+            storePassword = "irblasterpass"
+            keyAlias = "irblaster"
+            keyPassword = "irblasterpass"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("sharedSigning")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -31,7 +41,7 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("sharedSigning")
         }
     }
     compileOptions {
