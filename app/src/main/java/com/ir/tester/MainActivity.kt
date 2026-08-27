@@ -1,4 +1,5 @@
 package com.ir.tester
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,13 +13,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ir.tester.ui.screens.AutoScanScreen
@@ -48,15 +51,20 @@ import com.ir.tester.ui.screens.SignalGeneratorScreen
 import com.ir.tester.ui.screens.UniversalScanScreen
 import com.ir.tester.ui.theme.IrTesterTheme
 import com.ir.tester.viewmodel.MainViewModel
+
 class MainActivity : ComponentActivity() {
+
     private val viewModel: MainViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             IrTesterTheme {
                 val uiState by viewModel.uiState.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
+
                 LaunchedEffect(uiState.feedbackMessage) {
                     uiState.feedbackMessage?.let { msg ->
                         snackbarHostState.showSnackbar(
@@ -66,6 +74,7 @@ class MainActivity : ComponentActivity() {
                         viewModel.clearFeedbackMessage()
                     }
                 }
+
                 if (!uiState.hasIrEmitter && !uiState.isDemoMode) {
                     NoIrScreen(
                         onRetry = { viewModel.checkIrEmitter() },
@@ -81,6 +90,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppScaffold(
@@ -88,6 +98,7 @@ fun MainAppScaffold(
     snackbarHostState: SnackbarHostState
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -96,7 +107,6 @@ fun MainAppScaffold(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
                 tonalElevation = 6.dp
             ) {
-                // Tab 0: универсал
                 NavigationBarItem(
                     selected = uiState.selectedTab == 0,
                     onClick = { viewModel.selectTab(0) },
@@ -106,16 +116,26 @@ fun MainAppScaffold(
                                 Icons.Filled.Tune
                             else
                                 Icons.Outlined.Tune,
-                            contentDescription = "универсал"
+                            contentDescription = "универсал",
+                            modifier = Modifier.size(20.dp)
                         )
                     },
-                    label = { Text("универсал", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                    label = {
+                        Text(
+                            text = "универсал",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 9.5.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         indicatorColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 )
-                // Tab 1: брут
+
                 NavigationBarItem(
                     selected = uiState.selectedTab == 1,
                     onClick = { viewModel.selectTab(1) },
@@ -125,15 +145,26 @@ fun MainAppScaffold(
                                 Icons.Filled.PowerSettingsNew
                             else
                                 Icons.Outlined.PowerSettingsNew,
-                            contentDescription = "брут"
+                            contentDescription = "брут",
+                            modifier = Modifier.size(20.dp)
                         )
                     },
-                    label = { Text("брут", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                    label = {
+                        Text(
+                            text = "брут",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 9.5.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         indicatorColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 )
+
                 NavigationBarItem(
                     selected = uiState.selectedTab == 2,
                     onClick = { viewModel.selectTab(2) },
@@ -143,10 +174,20 @@ fun MainAppScaffold(
                                 Icons.Filled.GraphicEq
                             else
                                 Icons.Outlined.GraphicEq,
-                            contentDescription = "джаммер"
+                            contentDescription = "джаммер",
+                            modifier = Modifier.size(20.dp)
                         )
                     },
-                    label = { Text("джаммер", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                    label = {
+                        Text(
+                            text = "джаммер",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 9.5.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         indicatorColor = MaterialTheme.colorScheme.secondaryContainer
@@ -158,11 +199,24 @@ fun MainAppScaffold(
                     onClick = { viewModel.selectTab(3) },
                     icon = {
                         Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = "инфо"
+                            imageVector = if (uiState.selectedTab == 3)
+                                Icons.Filled.Info
+                            else
+                                Icons.Outlined.Info,
+                            contentDescription = "инфо",
+                            modifier = Modifier.size(20.dp)
                         )
                     },
-                    label = { Text("инфо", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                    label = {
+                        Text(
+                            text = "инфо",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 9.5.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onTertiaryContainer,
                         indicatorColor = MaterialTheme.colorScheme.tertiaryContainer
@@ -194,6 +248,7 @@ fun MainAppScaffold(
                         onToggleScan = { viewModel.toggleUniversalScan() },
                         onTestCode = { viewModel.transmitSingleCode(it) }
                     )
+
                     1 -> AutoScanScreen(
                         state = uiState.globalState,
                         onCategorySelected = { viewModel.selectGlobalCategory(it) },
@@ -201,12 +256,14 @@ fun MainAppScaffold(
                         onToggleScan = { viewModel.toggleGlobalScan() },
                         onTestCode = { viewModel.transmitSingleCode(it) }
                     )
+
                     2 -> SignalGeneratorScreen(
                         state = uiState.jammerState,
                         onFrequencySelected = { viewModel.setJammerFrequency(it) },
                         onModeSelected = { viewModel.setJammerMode(it) },
                         onToggleGenerator = { viewModel.toggleJammer() }
                     )
+
                     3 -> InfoScreen()
                 }
             }

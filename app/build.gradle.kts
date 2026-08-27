@@ -12,8 +12,8 @@ android {
         applicationId = "com.ir.tester"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -43,6 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -60,11 +61,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("androidx.compose.material:material-icons-extended:1.7.6")
-
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
