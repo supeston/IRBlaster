@@ -1,4 +1,5 @@
 package com.ir.tester.ui.screens
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,10 +32,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.ModeFanOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tv
@@ -48,8 +51,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import com.ir.tester.data.DeviceCategory
 import com.ir.tester.data.IrCodeItem
 import com.ir.tester.viewmodel.GlobalStepState
+
 @Composable
 fun AutoScanScreen(
     state: GlobalStepState,
@@ -92,6 +102,7 @@ fun AutoScanScreen(
         }
     }
 }
+
 @Composable
 private fun GlobalCategorySelectStep(
     onCategorySelected: (DeviceCategory) -> Unit
@@ -109,6 +120,7 @@ private fun GlobalCategorySelectStep(
             color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(24.dp))
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -147,6 +159,7 @@ private fun GlobalCategorySelectStep(
                                 modifier = Modifier.size(22.dp)
                             )
                         }
+
                         Text(
                             text = category.displayName,
                             style = MaterialTheme.typography.titleMedium,
@@ -159,6 +172,7 @@ private fun GlobalCategorySelectStep(
         }
     }
 }
+
 @Composable
 private fun GlobalActionStep(
     state: GlobalStepState,
@@ -166,9 +180,22 @@ private fun GlobalActionStep(
     onToggleScan: () -> Unit,
     onTestCode: (IrCodeItem) -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredCodes = remember(state.codesList, searchQuery) {
+        if (searchQuery.isBlank()) {
+            state.codesList
+        } else {
+            val q = searchQuery.trim().lowercase()
+            state.codesList.filter {
+                it.brand.lowercase().contains(q) || it.modelOrDescription.lowercase().contains(q)
+            }
+        }
+    }
+
     val progress = if (state.totalCount > 0) {
         state.sentCount.toFloat() / state.totalCount.toFloat()
     } else 0f
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -205,6 +232,7 @@ private fun GlobalActionStep(
                 }
             }
         }
+
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -218,18 +246,22 @@ private fun GlobalActionStep(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
                         text = "выключить все ${state.selectedCategory?.displayName ?: ""}".trim(),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
                     Text(
                         text = "последовательно отправит коды питания всех ${state.totalCount} мировых марок",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
                     Spacer(modifier = Modifier.height(24.dp))
+
                     Button(
                         onClick = onToggleScan,
                         modifier = Modifier
@@ -253,6 +285,7 @@ private fun GlobalActionStep(
                             fontSize = 16.sp
                         )
                     }
+
                     if (state.isScanning) {
                         Spacer(modifier = Modifier.height(20.dp))
                         LinearProgressIndicator(
@@ -273,51 +306,115 @@ private fun GlobalActionStep(
                 }
             }
         }
+
         item {
-            Text(
-                text = "список брендов в очереди:",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Column {
+                Text(
+                    text = "список брендов в очереди:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(
+                            text = "поиск по очереди...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "очистить",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
-        items(state.codesList) { codeItem ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
+
+        if (filteredCodes.isEmpty()) {
+            item {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = codeItem.brand.lowercase(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = codeItem.modelOrDescription.lowercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    FilledTonalIconButton(
-                        onClick = { onTestCode(codeItem) },
-                        modifier = Modifier.size(40.dp),
-                        shape = RoundedCornerShape(12.dp)
+                    Text(
+                        text = "ничего не найдено",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            items(filteredCodes) { codeItem ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "тест", modifier = Modifier.size(18.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = codeItem.brand.lowercase(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = codeItem.modelOrDescription.lowercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        FilledTonalIconButton(
+                            onClick = { onTestCode(codeItem) },
+                            modifier = Modifier.size(40.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "тест", modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
             }
         }
     }
 }
+
 private fun getCategoryIcon(category: DeviceCategory): ImageVector {
     return when (category) {
         DeviceCategory.TV -> Icons.Default.Tv

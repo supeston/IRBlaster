@@ -1,4 +1,5 @@
 package com.ir.tester.ui.screens
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,10 +33,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.ModeFanOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tv
@@ -49,8 +52,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import com.ir.tester.data.DeviceCategory
 import com.ir.tester.data.IrCodeItem
 import com.ir.tester.viewmodel.UniversalStepState
+
 @Composable
 fun UniversalScanScreen(
     state: UniversalStepState,
@@ -101,6 +111,7 @@ fun UniversalScanScreen(
         }
     }
 }
+
 @Composable
 private fun CategorySelectStep(
     onCategorySelected: (DeviceCategory) -> Unit
@@ -118,6 +129,7 @@ private fun CategorySelectStep(
             color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(18.dp))
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -156,6 +168,7 @@ private fun CategorySelectStep(
                                 modifier = Modifier.size(22.dp)
                             )
                         }
+
                         Text(
                             text = category.displayName,
                             style = MaterialTheme.typography.titleMedium,
@@ -168,6 +181,7 @@ private fun CategorySelectStep(
         }
     }
 }
+
 @Composable
 private fun BrandSelectStep(
     category: DeviceCategory,
@@ -175,12 +189,23 @@ private fun BrandSelectStep(
     onBrandSelected: (String) -> Unit,
     onBack: () -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredBrands = remember(brands, searchQuery) {
+        if (searchQuery.isBlank()) {
+            brands
+        } else {
+            val q = searchQuery.trim().lowercase()
+            brands.filter { it.lowercase().contains(q) }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
         Spacer(modifier = Modifier.height(12.dp))
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
@@ -202,53 +227,115 @@ private fun BrandSelectStep(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = category.displayName,
+                    text = "${category.displayName} • ${filteredBrands.size} доступно",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 96.dp)
-        ) {
-            items(brands) { brand ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onBrandSelected(brand) },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Row(
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = {
+                Text(
+                    text = "поиск марки (напр. samsung)...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "очистить",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (filteredBrands.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "марка не найдена",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 96.dp)
+            ) {
+                items(filteredBrands) { brand ->
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .clickable { onBrandSelected(brand) },
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
                     ) {
-                        Text(
-                            text = brand.lowercase(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = brand.lowercase(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
+
 @Composable
 private fun ActionTransmitStep(
     state: UniversalStepState,
@@ -259,6 +346,7 @@ private fun ActionTransmitStep(
     val progress = if (state.totalCount > 0) {
         state.sentCount.toFloat() / state.totalCount.toFloat()
     } else 0f
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -295,6 +383,7 @@ private fun ActionTransmitStep(
                 }
             }
         }
+
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -307,25 +396,23 @@ private fun ActionTransmitStep(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = if (state.isScanning) "идёт отправка сигналов..." else "готово к отправке",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (state.isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
                         text = "выключить ${state.selectedBrand.lowercase()}",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
                     Text(
                         text = "отправит пачкой все ${state.totalCount} вариантов кодов питания",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
                     Spacer(modifier = Modifier.height(24.dp))
+
                     Button(
                         onClick = onToggleScan,
                         modifier = Modifier
@@ -349,6 +436,7 @@ private fun ActionTransmitStep(
                             fontSize = 16.sp
                         )
                     }
+
                     if (state.isScanning) {
                         Spacer(modifier = Modifier.height(20.dp))
                         LinearProgressIndicator(
@@ -369,6 +457,7 @@ private fun ActionTransmitStep(
                 }
             }
         }
+
         item {
             Text(
                 text = "или проверьте коды по отдельности:",
@@ -377,6 +466,7 @@ private fun ActionTransmitStep(
                 color = MaterialTheme.colorScheme.onBackground
             )
         }
+
         items(state.brandCodes) { codeItem ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -402,6 +492,7 @@ private fun ActionTransmitStep(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
                     FilledTonalIconButton(
                         onClick = { onTestCode(codeItem) },
                         modifier = Modifier.size(40.dp),
@@ -414,6 +505,7 @@ private fun ActionTransmitStep(
         }
     }
 }
+
 private fun getCategoryIcon(category: DeviceCategory): ImageVector {
     return when (category) {
         DeviceCategory.TV -> Icons.Default.Tv
