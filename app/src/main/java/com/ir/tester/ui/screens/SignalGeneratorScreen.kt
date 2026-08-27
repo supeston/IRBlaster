@@ -129,7 +129,7 @@ fun SignalGeneratorScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = if (isRunning) "выключить джаммер" else "включить джаммер",
+                            text = if (isRunning) "остановить" else "заглушить",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -219,6 +219,7 @@ fun SignalGeneratorScreen(
         }
     }
 }
+
 @Composable
 private fun SimpleWaveform(
     isRunning: Boolean,
@@ -229,13 +230,15 @@ private fun SimpleWaveform(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
+            animation = tween(1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "phase_simple"
     )
+
     val primaryColor = MaterialTheme.colorScheme.primary
     val errorColor = MaterialTheme.colorScheme.error
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -275,39 +278,47 @@ private fun SimpleWaveform(
                     }
                 }
                 ModulationMode.BASIC -> {
-                    val stepX = 12f
-                    var isHigh = false
+                    val period = 36f
+                    val shift = (phase * 1.8f) % period
+                    val stepX = 4f
                     while (x < width) {
-                        path.lineTo(x, if (isHigh) midY - 14.dp.toPx() else midY + 14.dp.toPx())
+                        val pos = (x + shift) % period
+                        val isHigh = pos < (period / 2f)
+                        val y = if (isHigh) midY - 14.dp.toPx() else midY + 14.dp.toPx()
+                        path.lineTo(x, y)
                         x += stepX
-                        path.lineTo(x, if (isHigh) midY - 14.dp.toPx() else midY + 14.dp.toPx())
-                        isHigh = !isHigh
                     }
                 }
                 ModulationMode.RANDOM -> {
-                    val stepX = 6f
+                    val stepX = 4f
                     while (x < width) {
-                        val noise = (Math.random() * 36.dp.toPx() - 18.dp.toPx()).toFloat()
+                        val rad = Math.toRadians((phase * 4.0).toDouble())
+                        val noise = (kotlin.math.sin(x * 0.12f + rad) * kotlin.math.cos(x * 0.28f - rad) * 16.dp.toPx()).toFloat() +
+                                    (kotlin.math.sin(x * 0.6f + rad * 2) * 5.dp.toPx()).toFloat()
                         path.lineTo(x, midY + noise)
                         x += stepX
                     }
                 }
                 ModulationMode.ENHANCED_BASIC -> {
-                    val stepX = 8f
-                    var isHigh = false
+                    val period = 18f
+                    val shift = (phase * 3f) % period
+                    val stepX = 3f
                     while (x < width) {
-                        path.lineTo(x, if (isHigh) midY - 20.dp.toPx() else midY + 20.dp.toPx())
+                        val pos = (x + shift) % period
+                        val isHigh = pos < (period / 2f)
+                        val y = if (isHigh) midY - 18.dp.toPx() else midY + 18.dp.toPx()
+                        path.lineTo(x, y)
                         x += stepX
-                        path.lineTo(x, if (isHigh) midY - 20.dp.toPx() else midY + 20.dp.toPx())
-                        isHigh = !isHigh
                     }
                 }
                 ModulationMode.EMPTY -> {
-                    val stepX = 20f
+                    val period = 70f
+                    val shift = (phase * 2.2f) % period
+                    val stepX = 3f
                     while (x < width) {
-                        path.lineTo(x, midY - 10.dp.toPx())
-                        x += stepX
-                        path.lineTo(x, midY)
+                        val pos = (x + shift) % period
+                        val y = if (pos < 6f) midY - 18.dp.toPx() else if (pos < 12f) midY + 10.dp.toPx() else midY
+                        path.lineTo(x, y)
                         x += stepX
                     }
                 }
