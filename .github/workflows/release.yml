@@ -8,6 +8,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -38,7 +42,7 @@ jobs:
         run: |
           VERSION=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | sed 's/.*"\(.*\)".*/\1/')
           if [ -z "$VERSION" ]; then
-            VERSION="1.0.1"
+            VERSION="1.1.0"
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Detected Version: ${VERSION}"
