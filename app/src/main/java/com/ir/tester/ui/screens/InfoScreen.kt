@@ -1,7 +1,9 @@
 package com.ir.tester.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,9 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -33,12 +33,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,16 +53,21 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.BufferedReader
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
-const val CURRENT_APP_VERSION = "1.1.0"
+const val CURRENT_APP_VERSION = "1.2.0"
 
 data class ReleaseInfo(
     val tagName: String,
@@ -79,6 +86,12 @@ fun InfoScreen() {
     var checkResult by remember { mutableStateOf<String?>(null) }
     var availableRelease by remember { mutableStateOf<ReleaseInfo?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var downloadedBytes by remember { mutableLongStateOf(0L) }
+    var totalBytes by remember { mutableLongStateOf(0L) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
 
     fun checkUpdates() {
         isChecking = true
@@ -102,6 +115,36 @@ fun InfoScreen() {
             } catch (e: Exception) {
                 isChecking = false
                 checkResult = "ошибка проверки (проверьте интернет)"
+            }
+        }
+    }
+
+    fun startDownloadAndInstall(release: ReleaseInfo) {
+        isDownloading = true
+        downloadProgress = 0f
+        downloadError = null
+
+        coroutineScope.launch {
+            try {
+                val apkFile = withContext(Dispatchers.IO) {
+                    downloadApk(
+                        context = context,
+                        downloadUrl = release.downloadUrl,
+                        onProgress = { prog, current, total ->
+                            downloadProgress = prog
+                            downloadedBytes = current
+                            totalBytes = total
+                        }
+                    )
+                }
+                isDownloading = false
+                showDialog = false
+
+                // Launch Android Package Installer
+                installApk(context, apkFile)
+            } catch (e: Exception) {
+                isDownloading = false
+                downloadError = "ошибка скачивания: ${e.message}"
             }
         }
     }
@@ -230,7 +273,9 @@ fun InfoScreen() {
     if (showDialog && availableRelease != null) {
         val rel = availableRelease!!
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = {
+                if (!isDownloading) showDialog = false
+            },
             title = {
                 Text(
                     text = "доступно обновление!",
@@ -252,7 +297,33 @@ fun InfoScreen() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
-                    if (rel.releaseNotes.isNotBlank()) {
+
+                    if (isDownloading) {
+                        Spacer(modifier = Modifier.height(18.dp))
+                        LinearProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val currentMb = String.format(Locale.US, "%.1f", downloadedBytes / 1048576.0)
+                        val totalMb = if (totalBytes > 0) String.format(Locale.US, "%.1f", totalBytes / 1048576.0) else "?"
+                        Text(
+                            text = "скачивание... ${(downloadProgress * 100).toInt()}% ($currentMb МБ / $totalMb МБ)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else if (downloadError != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = downloadError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else if (rel.releaseNotes.isNotBlank()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = rel.releaseNotes,
@@ -263,22 +334,22 @@ fun InfoScreen() {
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(rel.downloadUrl))
-                        context.startActivity(intent)
-                        showDialog = false
-                    },
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("скачать", fontWeight = FontWeight.Bold)
+                if (!isDownloading) {
+                    Button(
+                        onClick = { startDownloadAndInstall(rel) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("скачать и установить", fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDialog = false }) {
-                    Text("позже", fontWeight = FontWeight.SemiBold)
+                if (!isDownloading) {
+                    TextButton(onClick = { showDialog = false }) {
+                        Text("позже", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             },
             shape = RoundedCornerShape(20.dp)
@@ -329,6 +400,83 @@ private fun fetchLatestRelease(): ReleaseInfo? {
         releaseNotes = releaseNotes,
         isNewer = isNewer
     )
+}
+
+private fun downloadApk(
+    context: Context,
+    downloadUrl: String,
+    onProgress: (Float, Long, Long) -> Unit
+): File {
+    var targetUrl = downloadUrl
+    var connection = URL(targetUrl).openConnection() as HttpURLConnection
+    connection.requestMethod = "GET"
+    connection.setRequestProperty("User-Agent", "IRBlaster-App")
+    connection.connectTimeout = 15000
+    connection.readTimeout = 15000
+    connection.instanceFollowRedirects = true
+
+    var status = connection.responseCode
+    // Handle GitHub redirects (302/301 -> AWS S3 download)
+    if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
+        val newUrl = connection.getHeaderField("Location")
+        if (!newUrl.isNullOrBlank()) {
+            connection.disconnect()
+            connection = URL(newUrl).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("User-Agent", "IRBlaster-App")
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            status = connection.responseCode
+        }
+    }
+
+    if (status != HttpURLConnection.HTTP_OK) {
+        throw RuntimeException("Ошибка сервера: $status")
+    }
+
+    val fileLength = connection.contentLength.toLong()
+    val apkFile = File(context.cacheDir, "IRBlaster_update.apk")
+    if (apkFile.exists()) {
+        apkFile.delete()
+    }
+
+    val input = BufferedInputStream(connection.inputStream)
+    val output = FileOutputStream(apkFile)
+    val buffer = ByteArray(8192)
+    var totalRead = 0L
+    var count: Int
+
+    while (input.read(buffer).also { count = it } != -1) {
+        totalRead += count
+        output.write(buffer, 0, count)
+        if (fileLength > 0) {
+            onProgress(totalRead.toFloat() / fileLength.toFloat(), totalRead, fileLength)
+        } else {
+            onProgress(0.5f, totalRead, 0L)
+        }
+    }
+
+    output.flush()
+    output.close()
+    input.close()
+    connection.disconnect()
+
+    return apkFile
+}
+
+private fun installApk(context: Context, apkFile: File) {
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        apkFile
+    )
+
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.android.package-archive")
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+    }
+
+    context.startActivity(intent)
 }
 
 private fun isVersionNewer(current: String, latest: String): Boolean {
