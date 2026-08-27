@@ -28,8 +28,10 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
 
       - name: Extract Version Name
         id: get_version
@@ -45,7 +47,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Prepare APK Asset
         run: |
@@ -60,9 +62,9 @@ jobs:
           body: |
             ### IRBlaster v${{ steps.get_version.outputs.version }}
 
-            - Добавлена встроенная проверка обновлений прямо внутри приложения
-            - Оптимизирована панель навигации (навбар) для узких экранов
-            - Полная база пультов Flipper-IRDB (125+ брендов ТВ, кондиционеры, проекторы и др.)
+            - Встроенная проверка обновлений внутри приложения
+            - Навбар оптимизирован для узких экранов
+            - Полная база пультов Flipper-IRDB (125+ брендов)
             - Автор: @teffun (t.me/teffun)
           files: release_assets/IRBlaster.apk
           draft: false
