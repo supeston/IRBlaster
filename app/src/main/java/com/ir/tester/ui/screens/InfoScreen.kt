@@ -67,7 +67,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-const val CURRENT_APP_VERSION = "1.2.4"
+const val CURRENT_APP_VERSION = "1.2.5"
 
 data class ReleaseInfo(
     val tagName: String,
