@@ -1,7 +1,9 @@
 package com.ir.tester.engine
+
 import android.content.Context
 import android.hardware.ConsumerIrManager
 import android.util.Log
+import com.ir.tester.usb.UsbIrManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.random.Random
+
 enum class ModulationMode(val title: String, val description: String) {
     BASIC(
         "BASIC",
@@ -34,6 +37,7 @@ enum class ModulationMode(val title: String, val description: String) {
         "Пакеты коротких преамбул для проверки отклика детектора и фронта сигнала."
     )
 }
+
 data class GeneratorMetrics(
     val packetsSent: Long = 0L,
     val elapsedSeconds: Long = 0L,
@@ -49,28 +53,39 @@ data class GeneratorMetrics(
             return String.format("%02d:%02d", minutes, seconds)
         }
 }
+
 class IrSignalEngine(private val context: Context) {
+
     private val irManager: ConsumerIrManager? by lazy {
         context.getSystemService(Context.CONSUMER_IR_SERVICE) as? ConsumerIrManager
     }
+
+    val usbIrManager = UsbIrManager(context)
+
     val hasEmitter: Boolean
         get() = try {
-            irManager?.hasIrEmitter() == true
+            (irManager?.hasIrEmitter() == true) || usbIrManager.isConnected.value
         } catch (e: Exception) {
-            false
+            usbIrManager.isConnected.value
         }
+
     private val _metrics = MutableStateFlow(GeneratorMetrics())
     val metrics: StateFlow<GeneratorMetrics> = _metrics.asStateFlow()
+
     private var engineJob: Job? = null
     private var timerJob: Job? = null
-    // Engine settings
+
     var carrierFrequency: Int = 38000
     var modulationMode: ModulationMode = ModulationMode.BASIC
-    var signalDensity: Int = 5 // 1..20
-    var sweepSpeed: Int = 5    // 1..10
+    var signalDensity: Int = 5
+    var sweepSpeed: Int = 5
     private var sweepCurrentUs = 80
-    private var sweepDirection = 1 // +1 or -1
+    private var sweepDirection = 1
+
     fun transmitSingle(frequency: Int, pattern: IntArray): Boolean {
+        if (usbIrManager.isConnected.value) {
+            return usbIrManager.transmit(frequency, pattern)
+        }
         return try {
             irManager?.transmit(frequency, pattern)
             true
@@ -79,6 +94,7 @@ class IrSignalEngine(private val context: Context) {
             false
         }
     }
+
     fun start(scope: CoroutineScope) {
         if (engineJob?.isActive == true) return
         sweepCurrentUs = 80
@@ -88,7 +104,9 @@ class IrSignalEngine(private val context: Context) {
         var lastRateCalcTime = System.currentTimeMillis()
         var lastRateCalcPackets = 0L
         var currentPps = 0.0
+
         _metrics.value = GeneratorMetrics(isRunning = true)
+
         timerJob = scope.launch(Dispatchers.Default) {
             while (isActive) {
                 val elapsed = (System.currentTimeMillis() - startTime) / 1000
@@ -109,29 +127,35 @@ class IrSignalEngine(private val context: Context) {
                 delay(200)
             }
         }
+
         engineJob = scope.launch(Dispatchers.Default) {
             try {
                 while (isActive) {
                     val pattern = generatePattern(modulationMode)
                     val freq = if (modulationMode == ModulationMode.RANDOM && Random.nextBoolean()) {
-                        // Dynamic jitter around carrier frequency +/- 5%
                         val delta = (carrierFrequency * 0.05 * (Random.nextDouble() - 0.5)).toInt()
                         (carrierFrequency + delta).coerceIn(30000, 56000)
                     } else {
                         carrierFrequency
                     }
-                    val success = try {
-                        irManager?.transmit(freq, pattern)
-                        true
-                    } catch (e: Exception) {
-                        Log.e("IrSignalEngine", "Transmit error in loop", e)
-                        _metrics.value = _metrics.value.copy(lastError = e.localizedMessage)
-                        false
+
+                    val success = if (usbIrManager.isConnected.value) {
+                        usbIrManager.transmit(freq, pattern)
+                    } else {
+                        try {
+                            irManager?.transmit(freq, pattern)
+                            true
+                        } catch (e: Exception) {
+                            Log.e("IrSignalEngine", "Transmit error in loop", e)
+                            _metrics.value = _metrics.value.copy(lastError = e.localizedMessage)
+                            false
+                        }
                     }
-                    if (success || irManager == null) {
+
+                    if (success || (irManager == null && !usbIrManager.isConnected.value)) {
                         packetCounter++
                     }
-                    // Mode-dependent inter-packet interval
+
                     val packetIntervalMs = when (modulationMode) {
                         ModulationMode.BASIC -> 20L
                         ModulationMode.ENHANCED_BASIC -> (25 - signalDensity).toLong().coerceAtLeast(3L)
@@ -146,6 +170,7 @@ class IrSignalEngine(private val context: Context) {
             }
         }
     }
+
     fun stop() {
         engineJob?.cancel()
         timerJob?.cancel()
@@ -153,10 +178,10 @@ class IrSignalEngine(private val context: Context) {
         timerJob = null
         _metrics.value = _metrics.value.copy(isRunning = false)
     }
+
     private fun generatePattern(mode: ModulationMode): IntArray {
         return when (mode) {
             ModulationMode.BASIC -> {
-                // Symmetric 20 pulses: 400us mark, 400us space
                 val count = 20 * 2
                 val arr = IntArray(count)
                 for (i in 0 until count) {
@@ -165,7 +190,6 @@ class IrSignalEngine(private val context: Context) {
                 arr
             }
             ModulationMode.ENHANCED_BASIC -> {
-                // Density multiplies pulse count (10 to 40 pulses), customizable mark/space
                 val pulses = 10 + (signalDensity * 2)
                 val markUs = 300 + (signalDensity * 20)
                 val spaceUs = 500 - (signalDensity * 15).coerceAtMost(350)
@@ -177,7 +201,6 @@ class IrSignalEngine(private val context: Context) {
                 arr
             }
             ModulationMode.SWEEP -> {
-                // Continuous pulse width sweep 80us -> 700us
                 val step = sweepSpeed * 15
                 sweepCurrentUs += sweepDirection * step
                 if (sweepCurrentUs >= 700) {
@@ -197,7 +220,6 @@ class IrSignalEngine(private val context: Context) {
                 arr
             }
             ModulationMode.RANDOM -> {
-                // 12 to 30 random pulses 50..1000us
                 val pulses = Random.nextInt(8, 20)
                 val arr = IntArray(pulses * 2)
                 for (i in 0 until pulses) {
@@ -207,7 +229,6 @@ class IrSignalEngine(private val context: Context) {
                 arr
             }
             ModulationMode.EMPTY -> {
-                // Short preambles for edge-trigger testing
                 intArrayOf(200, 200, 200, 400, 200, 200, 200, 800, 300, 300)
             }
         }

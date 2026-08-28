@@ -67,6 +67,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Initialize complete Flipper database from assets
         IrDatabase.init(application.applicationContext)
         viewModelScope.launch {
+            engine.usbIrManager.isConnected.collect {
+                _uiState.update { state ->
+                    state.copy(hasIrEmitter = engine.hasEmitter)
+                }
+            }
+        }
+        viewModelScope.launch {
             engine.metrics.collect { m ->
                 _uiState.update { state ->
                     state.copy(
