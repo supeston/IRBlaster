@@ -151,18 +151,18 @@ object IrDatabase {
     }
 
     fun getGlobalCategoryPowerCodes(category: DeviceCategory): List<IrCodeItem> {
-        val rawList = globalCodesMap[category] ?: run {
-            val collected = ArrayList<IrCodeItem>()
-            val brandsMap = categoryBrandsMap[category] ?: return emptyList()
-            for ((_, codes) in brandsMap) {
-                if (codes.isNotEmpty()) {
-                    collected.add(codes.first())
-                }
-            }
-            collected
+        val brandsMap = categoryBrandsMap[category] ?: return emptyList()
+        val allCodes = ArrayList<IrCodeItem>()
+        val orderedBrands = getBrandsForCategory(category)
+        for (brand in orderedBrands) {
+            val codes = brandsMap[brand] ?: continue
+            allCodes.addAll(codes)
         }
-
-        return sortCodesByPopularity(category, rawList)
+        if (allCodes.isNotEmpty()) {
+            return allCodes
+        }
+        val fallback = globalCodesMap[category] ?: emptyList()
+        return sortCodesByPopularity(category, fallback)
     }
 
     private fun getBrandPriority(category: DeviceCategory, brand: String): Int {
