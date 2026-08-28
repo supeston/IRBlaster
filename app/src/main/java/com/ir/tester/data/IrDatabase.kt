@@ -103,6 +103,7 @@ object IrDatabase {
         return when (name.uppercase()) {
             "TV" -> DeviceCategory.TV
             "AC" -> DeviceCategory.AC
+            "WHITEBOARD", "BOARD", "WHITEBOARDS" -> DeviceCategory.WHITEBOARD
             "SET_TOP_BOX" -> DeviceCategory.SET_TOP_BOX
             "AUDIO" -> DeviceCategory.AUDIO
             "PROJECTOR" -> DeviceCategory.PROJECTOR
@@ -220,6 +221,21 @@ object IrDatabase {
                 b.contains("hitachi") -> 21
                 b.contains("dexp") -> 22
                 b.contains("chigo") -> 23
+                else -> 100
+            }
+            DeviceCategory.WHITEBOARD -> when {
+                b.contains("irbis") -> 0
+                b.contains("promethean") -> 1
+                b.contains("smart") -> 2
+                b.contains("lumien") -> 3
+                b.contains("boxlight") -> 4
+                b.contains("philips") -> 5
+                b.contains("newline") -> 6
+                b.contains("nextouch") -> 7
+                b.contains("iqboard") -> 8
+                b.contains("teachtouch") -> 9
+                b.contains("edusmart") -> 10
+                b.contains("donview") || b.contains("horion") -> 11
                 else -> 100
             }
             DeviceCategory.SET_TOP_BOX -> when {

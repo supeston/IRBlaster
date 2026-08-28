@@ -78,7 +78,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-const val CURRENT_APP_VERSION = "2.1.1"
+const val CURRENT_APP_VERSION = "2.2.0"
 
 data class ReleaseHistoryItem(
     val tagName: String,

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CoPresent
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.ModeFanOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -510,6 +511,7 @@ private fun getCategoryIcon(category: DeviceCategory): ImageVector {
     return when (category) {
         DeviceCategory.TV -> Icons.Default.Tv
         DeviceCategory.AC -> Icons.Default.AcUnit
+        DeviceCategory.WHITEBOARD -> Icons.Default.CoPresent
         DeviceCategory.SET_TOP_BOX -> Icons.Default.Router
         DeviceCategory.AUDIO -> Icons.Default.Speaker
         DeviceCategory.PROJECTOR -> Icons.Default.Videocam
