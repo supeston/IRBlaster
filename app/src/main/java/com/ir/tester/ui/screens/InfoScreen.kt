@@ -3,7 +3,6 @@ package com.ir.tester.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,13 +20,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -35,9 +38,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -57,6 +61,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedReader
@@ -67,13 +72,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-const val CURRENT_APP_VERSION = "1.2.5"
+const val CURRENT_APP_VERSION = "1.3.0"
 
-data class ReleaseInfo(
+data class ReleaseHistoryItem(
     val tagName: String,
+    val name: String,
+    val changelog: String,
     val downloadUrl: String,
-    val releaseNotes: String,
-    val isNewer: Boolean
+    val isCurrent: Boolean
 )
 
 @Composable
@@ -84,43 +90,37 @@ fun InfoScreen() {
 
     var isChecking by remember { mutableStateOf(false) }
     var checkResult by remember { mutableStateOf<String?>(null) }
-    var availableRelease by remember { mutableStateOf<ReleaseInfo?>(null) }
-    var showDialog by remember { mutableStateOf(false) }
+    var releasesList by remember { mutableStateOf<List<ReleaseHistoryItem>>(emptyList()) }
+    var isLoadingReleases by remember { mutableStateOf(false) }
 
-    var isDownloading by remember { mutableStateOf(false) }
+    var downloadingTag by remember { mutableStateOf<String?>(null) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var downloadedBytes by remember { mutableLongStateOf(0L) }
     var totalBytes by remember { mutableLongStateOf(0L) }
     var downloadError by remember { mutableStateOf<String?>(null) }
 
-    fun checkUpdates() {
-        isChecking = true
-        checkResult = null
+    fun loadAllReleases() {
+        isLoadingReleases = true
         coroutineScope.launch {
             try {
-                val release = withContext(Dispatchers.IO) {
-                    fetchLatestRelease()
+                val list = withContext(Dispatchers.IO) {
+                    fetchAllReleases()
                 }
-                isChecking = false
-                if (release != null) {
-                    if (release.isNewer) {
-                        availableRelease = release
-                        showDialog = true
-                    } else {
-                        checkResult = "у вас установлена самая свежая версия ($CURRENT_APP_VERSION)"
-                    }
-                } else {
-                    checkResult = "нет данных об обновлениях"
-                }
+                releasesList = list
+                isLoadingReleases = false
             } catch (e: Exception) {
-                isChecking = false
-                checkResult = "ошибка проверки (проверьте интернет)"
+                isLoadingReleases = false
             }
         }
     }
 
-    fun startDownloadAndInstall(release: ReleaseInfo) {
-        isDownloading = true
+    LaunchedEffect(Unit) {
+        loadAllReleases()
+    }
+
+    fun startDownloadAndInstall(item: ReleaseHistoryItem) {
+        if (item.downloadUrl.isBlank()) return
+        downloadingTag = item.tagName
         downloadProgress = 0f
         downloadError = null
 
@@ -129,7 +129,7 @@ fun InfoScreen() {
                 val apkFile = withContext(Dispatchers.IO) {
                     downloadApk(
                         context = context,
-                        downloadUrl = release.downloadUrl,
+                        downloadUrl = item.downloadUrl,
                         onProgress = { prog, current, total ->
                             downloadProgress = prog
                             downloadedBytes = current
@@ -137,228 +137,323 @@ fun InfoScreen() {
                         }
                     )
                 }
-                isDownloading = false
-                showDialog = false
-
-                // Launch Android Package Installer
+                downloadingTag = null
                 installApk(context, apkFile)
             } catch (e: Exception) {
-                isDownloading = false
+                downloadingTag = null
                 downloadError = "ошибка скачивания: ${e.message}"
             }
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(horizontal = 20.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(36.dp)
+        item {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "IRBlaster",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "версия $CURRENT_APP_VERSION",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri("https://t.me/teffun") },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "автор: ",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "@teffun",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
 
-        Text(
-            text = "IRBlaster",
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        item {
+            Button(
+                onClick = {
+                    isChecking = true
+                    checkResult = null
+                    coroutineScope.launch {
+                        try {
+                            val list = withContext(Dispatchers.IO) {
+                                fetchAllReleases()
+                            }
+                            releasesList = list
+                            isChecking = false
 
-        Spacer(modifier = Modifier.height(4.dp))
+                            val latest = list.firstOrNull()
+                            if (latest != null) {
+                                val cleanTag = latest.tagName.removePrefix("v").trim()
+                                if (isVersionNewer(CURRENT_APP_VERSION, cleanTag)) {
+                                    checkResult = "доступна новая версия: ${latest.tagName}"
+                                } else {
+                                    checkResult = "у вас установлена последняя версия ($CURRENT_APP_VERSION)"
+                                }
+                            } else {
+                                checkResult = "нет данных"
+                            }
+                        } catch (e: Exception) {
+                            isChecking = false
+                            checkResult = "ошибка проверки"
+                        }
+                    }
+                },
+                enabled = !isChecking,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "проверка...",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "проверить обновления",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+            }
 
-        Text(
-            text = "версия $CURRENT_APP_VERSION",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+            AnimatedVisibility(
+                visible = checkResult != null,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                checkResult?.let { msg ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
 
-        Spacer(modifier = Modifier.height(20.dp))
+            downloadError?.let { err ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
 
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { uriHandler.openUri("https://t.me/teffun") },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
+        item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "автор: ",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "@teffun",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        Button(
-            onClick = { checkUpdates() },
-            enabled = !isChecking,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            if (isChecking) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(22.dp),
-                    strokeWidth = 2.5.dp
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "проверка...",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-            } else {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "проверить обновления",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = checkResult != null,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            checkResult?.let { msg ->
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = msg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-
-    if (showDialog && availableRelease != null) {
-        val rel = availableRelease!!
-        AlertDialog(
-            onDismissRequest = {
-                if (!isDownloading) showDialog = false
-            },
-            title = {
-                Text(
-                    text = "доступно обновление!",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge
-                )
-            },
-            text = {
-                Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "найдена новая версия: ${rel.tagName}",
+                        text = "история версий и ченжлоги:",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodyLarge
+                        color = MaterialTheme.colorScheme.onBackground
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "текущая версия: $CURRENT_APP_VERSION",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                }
 
-                    if (isDownloading) {
-                        Spacer(modifier = Modifier.height(18.dp))
-                        LinearProgressIndicator(
-                            progress = { downloadProgress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val currentMb = String.format(Locale.US, "%.1f", downloadedBytes / 1048576.0)
-                        val totalMb = if (totalBytes > 0) String.format(Locale.US, "%.1f", totalBytes / 1048576.0) else "?"
-                        Text(
-                            text = "скачивание... ${(downloadProgress * 100).toInt()}% ($currentMb МБ / $totalMb МБ)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else if (downloadError != null) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = downloadError!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else if (rel.releaseNotes.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = rel.releaseNotes,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                if (isLoadingReleases) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
-            },
-            confirmButton = {
-                if (!isDownloading) {
-                    Button(
-                        onClick = { startDownloadAndInstall(rel) },
-                        shape = RoundedCornerShape(12.dp)
+            }
+        }
+
+        if (releasesList.isEmpty() && !isLoadingReleases) {
+            item {
+                Text(
+                    text = "список версий пуст или нет интернета",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            items(releasesList) { item ->
+                val isDownloadingThis = downloadingTag == item.tagName
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (item.isCurrent)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("скачать и установить", fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = item.tagName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (item.isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (item.isCurrent) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.primary)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "текущая",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (item.changelog.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = item.changelog,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (isDownloadingThis) {
+                            Column {
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                val currentMb = String.format(Locale.US, "%.1f", downloadedBytes / 1048576.0)
+                                val totalMb = if (totalBytes > 0) String.format(Locale.US, "%.1f", totalBytes / 1048576.0) else "?"
+                                Text(
+                                    text = "скачивание... ${(downloadProgress * 100).toInt()}% ($currentMb МБ / $totalMb МБ)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            if (item.isCurrent) {
+                                OutlinedButton(
+                                    onClick = { startDownloadAndInstall(item) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("переустановить эту версию", fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Button(
+                                    onClick = { startDownloadAndInstall(item) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("скачать и установить ${item.tagName}", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 }
-            },
-            dismissButton = {
-                if (!isDownloading) {
-                    TextButton(onClick = { showDialog = false }) {
-                        Text("позже", fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            },
-            shape = RoundedCornerShape(20.dp)
-        )
+            }
+        }
     }
 }
 
-private fun fetchLatestRelease(): ReleaseInfo? {
-    val url = URL("https://api.github.com/repos/supeston/IRBlaster/releases/latest")
+private fun fetchAllReleases(): List<ReleaseHistoryItem> {
+    val url = URL("https://api.github.com/repos/supeston/IRBlaster/releases")
     val connection = url.openConnection() as HttpURLConnection
     connection.requestMethod = "GET"
     connection.setRequestProperty("User-Agent", "IRBlaster-App")
@@ -367,7 +462,7 @@ private fun fetchLatestRelease(): ReleaseInfo? {
     connection.readTimeout = 8000
 
     if (connection.responseCode != 200) {
-        return null
+        return emptyList()
     }
 
     val reader = BufferedReader(InputStreamReader(connection.inputStream))
@@ -375,31 +470,43 @@ private fun fetchLatestRelease(): ReleaseInfo? {
     reader.close()
     connection.disconnect()
 
-    val json = JSONObject(response)
-    val rawTag = json.optString("tag_name", "v1.0.0")
-    val cleanTag = rawTag.removePrefix("v").trim()
-    val releaseNotes = json.optString("body", "")
+    val jsonArray = JSONArray(response)
+    val list = ArrayList<ReleaseHistoryItem>()
 
-    var downloadUrl = json.optString("html_url", "https://github.com/supeston/IRBlaster/releases")
-    val assets = json.optJSONArray("assets")
-    if (assets != null && assets.length() > 0) {
-        for (i in 0 until assets.length()) {
-            val asset = assets.getJSONObject(i)
-            val name = asset.optString("name", "")
-            if (name.endsWith(".apk", ignoreCase = true)) {
-                downloadUrl = asset.optString("browser_download_url", downloadUrl)
-                break
+    for (i in 0 until jsonArray.length()) {
+        val obj = jsonArray.getJSONObject(i)
+        val rawTag = obj.optString("tag_name", "")
+        val cleanTag = rawTag.removePrefix("v").trim()
+        val name = obj.optString("name", rawTag)
+        val body = obj.optString("body", "").trim()
+
+        var downloadUrl = obj.optString("html_url", "")
+        val assets = obj.optJSONArray("assets")
+        if (assets != null && assets.length() > 0) {
+            for (j in 0 until assets.length()) {
+                val asset = assets.getJSONObject(j)
+                val assetName = asset.optString("name", "")
+                if (assetName.endsWith(".apk", ignoreCase = true)) {
+                    downloadUrl = asset.optString("browser_download_url", downloadUrl)
+                    break
+                }
             }
         }
+
+        val isCurrent = cleanTag == CURRENT_APP_VERSION
+
+        list.add(
+            ReleaseHistoryItem(
+                tagName = rawTag,
+                name = name,
+                changelog = body,
+                downloadUrl = downloadUrl,
+                isCurrent = isCurrent
+            )
+        )
     }
 
-    val isNewer = isVersionNewer(CURRENT_APP_VERSION, cleanTag)
-    return ReleaseInfo(
-        tagName = rawTag,
-        downloadUrl = downloadUrl,
-        releaseNotes = releaseNotes,
-        isNewer = isNewer
-    )
+    return list
 }
 
 private fun downloadApk(
