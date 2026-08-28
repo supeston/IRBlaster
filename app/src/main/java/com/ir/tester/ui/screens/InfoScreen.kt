@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,6 +42,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,14 +75,16 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-const val CURRENT_APP_VERSION = "1.3.1"
+const val CURRENT_APP_VERSION = "1.3.2"
 
 data class ReleaseHistoryItem(
     val tagName: String,
     val name: String,
     val changelog: String,
     val downloadUrl: String,
-    val isCurrent: Boolean
+    val isCurrent: Boolean,
+    val isNewer: Boolean,
+    val isOlder: Boolean
 )
 
 @Composable
@@ -98,6 +103,7 @@ fun InfoScreen() {
     var downloadedBytes by remember { mutableLongStateOf(0L) }
     var totalBytes by remember { mutableLongStateOf(0L) }
     var downloadError by remember { mutableStateOf<String?>(null) }
+    var showDowngradeDialogFor by remember { mutableStateOf<ReleaseHistoryItem?>(null) }
 
     fun loadAllReleases() {
         isLoadingReleases = true
@@ -433,7 +439,7 @@ fun InfoScreen() {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("переустановить эту версию", fontWeight = FontWeight.Bold)
                                 }
-                            } else {
+                            } else if (item.isNewer) {
                                 Button(
                                     onClick = { startDownloadAndInstall(item) },
                                     modifier = Modifier.fillMaxWidth(),
@@ -441,7 +447,17 @@ fun InfoScreen() {
                                 ) {
                                     Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("скачать и установить ${item.tagName}", fontWeight = FontWeight.Bold)
+                                    Text("обновить до ${item.tagName}", fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { showDowngradeDialogFor = item },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("скачать ${item.tagName} (старая)", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -449,6 +465,52 @@ fun InfoScreen() {
                 }
             }
         }
+    }
+
+    if (showDowngradeDialogFor != null) {
+        val target = showDowngradeDialogFor!!
+        AlertDialog(
+            onDismissRequest = { showDowngradeDialogFor = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "откат на старую версию",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Android на системном уровне блокирует установку более старой версии поверх новой. Чтобы поставить ${target.tagName}, сначала удалите текущее приложение с телефона, затем запустите скачанный файл.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val itemToDownload = target
+                        showDowngradeDialogFor = null
+                        startDownloadAndInstall(itemToDownload)
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("скачать APK", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDowngradeDialogFor = null }) {
+                    Text("отмена", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 }
 
@@ -493,7 +555,10 @@ private fun fetchAllReleases(): List<ReleaseHistoryItem> {
             }
         }
 
-        val isCurrent = cleanTag == CURRENT_APP_VERSION
+        val cmp = compareVersions(cleanTag, CURRENT_APP_VERSION)
+        val isCurrent = cmp == 0
+        val isNewer = cmp > 0
+        val isOlder = cmp < 0
 
         list.add(
             ReleaseHistoryItem(
@@ -501,7 +566,9 @@ private fun fetchAllReleases(): List<ReleaseHistoryItem> {
                 name = name,
                 changelog = body,
                 downloadUrl = downloadUrl,
-                isCurrent = isCurrent
+                isCurrent = isCurrent,
+                isNewer = isNewer,
+                isOlder = isOlder
             )
         )
     }
@@ -523,7 +590,6 @@ private fun downloadApk(
     connection.instanceFollowRedirects = true
 
     var status = connection.responseCode
-    // Handle GitHub redirects (302/301 -> AWS S3 download)
     if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
         val newUrl = connection.getHeaderField("Location")
         if (!newUrl.isNullOrBlank()) {
@@ -586,20 +652,24 @@ private fun installApk(context: Context, apkFile: File) {
     context.startActivity(intent)
 }
 
-private fun isVersionNewer(current: String, latest: String): Boolean {
+private fun compareVersions(v1: String, v2: String): Int {
     try {
-        val currParts = current.split(".").map { it.toIntOrNull() ?: 0 }
-        val latestParts = latest.split(".").map { it.toIntOrNull() ?: 0 }
+        val p1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
+        val p2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
 
-        val maxLen = maxOf(currParts.size, latestParts.size)
+        val maxLen = maxOf(p1.size, p2.size)
         for (i in 0 until maxLen) {
-            val c = if (i < currParts.size) currParts[i] else 0
-            val l = if (i < latestParts.size) latestParts[i] else 0
-            if (l > c) return true
-            if (l < c) return false
+            val c1 = if (i < p1.size) p1[i] else 0
+            val c2 = if (i < p2.size) p2[i] else 0
+            if (c1 > c2) return 1
+            if (c1 < c2) return -1
         }
-        return false
+        return 0
     } catch (e: Exception) {
-        return latest != current
+        return v1.compareTo(v2)
     }
+}
+
+private fun isVersionNewer(current: String, latest: String): Boolean {
+    return compareVersions(latest, current) > 0
 }
