@@ -2,10 +2,10 @@ package com.ir.tester.data
 enum class DeviceCategory(val displayName: String, val singleName: String) {
     TV("телики", "телик"),
     AC("кондеры", "кондер"),
-    SET_TOP_BOX("тв-приставки", "тв-приставка"),
+    SET_TOP_BOX("приставки", "приставка"),
     AUDIO("саундбары", "саундбар"),
     PROJECTOR("проекторы", "проектор"),
-    FAN_HEATER("вентиляторы", "вентилятор"),
+    FAN_HEATER("вентили", "вентиль"),
     LED("led ленты", "led лента"),
     CAMERA("фотики", "фотик")
 }
