@@ -1,5 +1,6 @@
 package com.ir.tester
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -65,6 +66,14 @@ class MainActivity : ComponentActivity() {
             IrTesterTheme {
                 val uiState by viewModel.uiState.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
+
+                LaunchedEffect(uiState.isUsbDongleConnected) {
+                    requestedOrientation = if (uiState.isUsbDongleConnected) {
+                        ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                    }
+                }
 
                 LaunchedEffect(uiState.feedbackMessage) {
                     uiState.feedbackMessage?.let { msg ->

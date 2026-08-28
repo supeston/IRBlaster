@@ -46,30 +46,36 @@ data class SimpleJammerState(
 )
 data class MainUiState(
     val hasIrEmitter: Boolean = false,
+    val isUsbDongleConnected: Boolean = false,
     val isDemoMode: Boolean = false,
-    val selectedTab: Int = 0, // 0: Универсал, 1: Брут, 2: Джаммер
+    val selectedTab: Int = 0,
     val universalState: UniversalStepState = UniversalStepState(),
     val globalState: GlobalStepState = GlobalStepState(),
     val jammerState: SimpleJammerState = SimpleJammerState(),
     val feedbackMessage: String? = null
 )
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val engine = IrSignalEngine(application.applicationContext)
     private val _uiState = MutableStateFlow(
         MainUiState(
-            hasIrEmitter = engine.hasEmitter
+            hasIrEmitter = engine.hasEmitter,
+            isUsbDongleConnected = engine.usbIrManager.isConnected.value
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     private var universalScanJob: Job? = null
     private var globalScanJob: Job? = null
+
     init {
-        // Initialize complete Flipper database from assets
         IrDatabase.init(application.applicationContext)
         viewModelScope.launch {
-            engine.usbIrManager.isConnected.collect {
+            engine.usbIrManager.isConnected.collect { isUsb ->
                 _uiState.update { state ->
-                    state.copy(hasIrEmitter = engine.hasEmitter)
+                    state.copy(
+                        hasIrEmitter = engine.hasEmitter,
+                        isUsbDongleConnected = isUsb
+                    )
                 }
             }
         }
