@@ -52,7 +52,11 @@ data class MainUiState(
     val universalState: UniversalStepState = UniversalStepState(),
     val globalState: GlobalStepState = GlobalStepState(),
     val jammerState: SimpleJammerState = SimpleJammerState(),
-    val feedbackMessage: String? = null
+    val feedbackMessage: String? = null,
+    val availableUpdate: com.ir.tester.data.ReleaseHistoryItem? = null,
+    val isLatestVersion: Boolean = false,
+    val isCheckingUpdate: Boolean = false,
+    val releasesList: List<com.ir.tester.data.ReleaseHistoryItem> = emptyList()
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -92,7 +96,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        checkForUpdatesInBackground()
     }
+
+    fun checkForUpdatesInBackground() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isCheckingUpdate = true) }
+            try {
+                val list = com.ir.tester.data.ReleaseRepository.fetchAllReleases()
+                val latest = list.firstOrNull()
+                val isNewer = if (latest != null) {
+                    val cleanTag = latest.tagName.removePrefix("v").trim()
+                    com.ir.tester.data.ReleaseRepository.compareVersions(cleanTag, com.ir.tester.data.CURRENT_APP_VERSION) > 0
+                } else false
+
+                _uiState.update {
+                    it.copy(
+                        releasesList = list,
+                        availableUpdate = if (isNewer) latest else null,
+                        isLatestVersion = !isNewer && list.isNotEmpty(),
+                        isCheckingUpdate = false
+                    )
+                }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isCheckingUpdate = false) }
+            }
+        }
+    }
+
     fun checkIrEmitter() {
         _uiState.update { it.copy(hasIrEmitter = engine.hasEmitter) }
     }

@@ -208,14 +208,25 @@ fun MainAppScaffold(
                     selected = uiState.selectedTab == 3,
                     onClick = { viewModel.selectTab(3) },
                     icon = {
-                        Icon(
-                            imageVector = if (uiState.selectedTab == 3)
-                                Icons.Filled.Info
-                            else
-                                Icons.Outlined.Info,
-                            contentDescription = "инфо",
-                            modifier = Modifier.size(20.dp)
-                        )
+                        androidx.compose.material3.BadgedBox(
+                            badge = {
+                                if (uiState.availableUpdate != null) {
+                                    androidx.compose.material3.Badge(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(6.dp)
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.selectedTab == 3)
+                                    Icons.Filled.Info
+                                else
+                                    Icons.Outlined.Info,
+                                contentDescription = "инфо",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     },
                     label = {
                         Text(
@@ -275,7 +286,7 @@ fun MainAppScaffold(
                         onToggleGenerator = { viewModel.toggleJammer() }
                     )
 
-                    3 -> InfoScreen()
+                    3 -> InfoScreen(viewModel = viewModel)
                 }
             }
         }

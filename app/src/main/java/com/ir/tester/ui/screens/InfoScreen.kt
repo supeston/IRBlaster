@@ -1,8 +1,5 @@
 package com.ir.tester.ui.screens
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
@@ -46,7 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,45 +61,24 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ir.tester.data.CURRENT_APP_VERSION
+import com.ir.tester.data.ReleaseHistoryItem
+import com.ir.tester.data.ReleaseRepository
+import com.ir.tester.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.BufferedInputStream
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 
-const val CURRENT_APP_VERSION = "2.2.0"
-
-data class ReleaseHistoryItem(
-    val tagName: String,
-    val name: String,
-    val changelog: String,
-    val downloadUrl: String,
-    val isCurrent: Boolean,
-    val isNewer: Boolean,
-    val isOlder: Boolean
-)
-
 @Composable
-fun InfoScreen() {
+fun InfoScreen(viewModel: MainViewModel = viewModel()) {
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsState()
 
-    var isChecking by remember { mutableStateOf(false) }
-    var checkResult by remember { mutableStateOf<String?>(null) }
-    var releasesList by remember { mutableStateOf<List<ReleaseHistoryItem>>(emptyList()) }
-    var isLoadingReleases by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
-
     var downloadingTag by remember { mutableStateOf<String?>(null) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var downloadedBytes by remember { mutableLongStateOf(0L) }
@@ -109,29 +86,10 @@ fun InfoScreen() {
     var downloadError by remember { mutableStateOf<String?>(null) }
     var showDowngradeDialogFor by remember { mutableStateOf<ReleaseHistoryItem?>(null) }
 
+    val releasesList = uiState.releasesList
     val pageSize = 10
     val totalPages = if (releasesList.isNotEmpty()) (releasesList.size + pageSize - 1) / pageSize else 1
     val pagedReleases = releasesList.drop(currentPage * pageSize).take(pageSize)
-
-    fun loadAllReleases() {
-        isLoadingReleases = true
-        coroutineScope.launch {
-            try {
-                val list = withContext(Dispatchers.IO) {
-                    fetchAllReleases()
-                }
-                releasesList = list
-                currentPage = 0
-                isLoadingReleases = false
-            } catch (e: Exception) {
-                isLoadingReleases = false
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        loadAllReleases()
-    }
 
     fun startDownloadAndInstall(item: ReleaseHistoryItem) {
         if (item.downloadUrl.isBlank()) return
@@ -142,7 +100,7 @@ fun InfoScreen() {
         coroutineScope.launch {
             try {
                 val apkFile = withContext(Dispatchers.IO) {
-                    downloadApk(
+                    ReleaseRepository.downloadApk(
                         context = context,
                         downloadUrl = item.downloadUrl,
                         onProgress = { prog, current, total ->
@@ -153,7 +111,7 @@ fun InfoScreen() {
                     )
                 }
                 downloadingTag = null
-                installApk(context, apkFile)
+                ReleaseRepository.installApk(context, apkFile)
             } catch (e: Exception) {
                 downloadingTag = null
                 downloadError = "ошибка скачивания: ${e.message}"
@@ -234,56 +192,108 @@ fun InfoScreen() {
         }
 
         item {
-            Button(
-                onClick = {
-                    isChecking = true
-                    checkResult = null
-                    coroutineScope.launch {
-                        try {
-                            val list = withContext(Dispatchers.IO) {
-                                fetchAllReleases()
-                            }
-                            releasesList = list
-                            currentPage = 0
-                            isChecking = false
-
-                            val latest = list.firstOrNull()
-                            if (latest != null) {
-                                val cleanTag = latest.tagName.removePrefix("v").trim()
-                                if (isVersionNewer(CURRENT_APP_VERSION, cleanTag)) {
-                                    checkResult = "доступна новая версия: ${latest.tagName}"
-                                } else {
-                                    checkResult = "у вас установлена последняя версия ($CURRENT_APP_VERSION)"
-                                }
-                            } else {
-                                checkResult = "нет данных"
-                            }
-                        } catch (e: Exception) {
-                            isChecking = false
-                            checkResult = "ошибка проверки"
-                        }
-                    }
-                },
-                enabled = !isChecking,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                if (isChecking) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.5.dp
+            if (uiState.isCheckingUpdate) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "проверка обновлений...",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            } else if (uiState.availableUpdate != null) {
+                val upd = uiState.availableUpdate!!
+                Button(
+                    onClick = { startDownloadAndInstall(upd) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudDownload,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "проверка...",
+                        text = "обновить до ${upd.tagName}",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
-                } else {
+                }
+            } else if (uiState.isLatestVersion) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .clickable { viewModel.checkForUpdatesInBackground() },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "у вас последняя версия ($CURRENT_APP_VERSION)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "проверить снова",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { viewModel.checkForUpdatesInBackground() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -291,22 +301,6 @@ fun InfoScreen() {
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = checkResult != null,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                checkResult?.let { msg ->
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = msg,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -345,13 +339,13 @@ fun InfoScreen() {
                     )
                 }
 
-                if (isLoadingReleases) {
+                if (uiState.isCheckingUpdate && releasesList.isEmpty()) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
             }
         }
 
-        if (releasesList.isEmpty() && !isLoadingReleases) {
+        if (releasesList.isEmpty() && !uiState.isCheckingUpdate) {
             item {
                 Text(
                     text = "список версий пуст или нет интернета",
@@ -569,164 +563,4 @@ fun InfoScreen() {
             shape = RoundedCornerShape(20.dp)
         )
     }
-}
-
-private fun fetchAllReleases(): List<ReleaseHistoryItem> {
-    val url = URL("https://api.github.com/repos/supeston/IRBlaster/releases")
-    val connection = url.openConnection() as HttpURLConnection
-    connection.requestMethod = "GET"
-    connection.setRequestProperty("User-Agent", "IRBlaster-App")
-    connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-    connection.connectTimeout = 8000
-    connection.readTimeout = 8000
-
-    if (connection.responseCode != 200) {
-        return emptyList()
-    }
-
-    val reader = BufferedReader(InputStreamReader(connection.inputStream))
-    val response = reader.readText()
-    reader.close()
-    connection.disconnect()
-
-    val jsonArray = JSONArray(response)
-    val list = ArrayList<ReleaseHistoryItem>()
-
-    for (i in 0 until jsonArray.length()) {
-        val obj = jsonArray.getJSONObject(i)
-        val rawTag = obj.optString("tag_name", "")
-        val cleanTag = rawTag.removePrefix("v").trim()
-        val name = obj.optString("name", rawTag)
-        val body = obj.optString("body", "").trim()
-
-        var downloadUrl = obj.optString("html_url", "")
-        val assets = obj.optJSONArray("assets")
-        if (assets != null && assets.length() > 0) {
-            for (j in 0 until assets.length()) {
-                val asset = assets.getJSONObject(j)
-                val assetName = asset.optString("name", "")
-                if (assetName.endsWith(".apk", ignoreCase = true)) {
-                    downloadUrl = asset.optString("browser_download_url", downloadUrl)
-                    break
-                }
-            }
-        }
-
-        val cmp = compareVersions(cleanTag, CURRENT_APP_VERSION)
-        val isCurrent = cmp == 0
-        val isNewer = cmp > 0
-        val isOlder = cmp < 0
-
-        list.add(
-            ReleaseHistoryItem(
-                tagName = rawTag,
-                name = name,
-                changelog = body,
-                downloadUrl = downloadUrl,
-                isCurrent = isCurrent,
-                isNewer = isNewer,
-                isOlder = isOlder
-            )
-        )
-    }
-
-    return list
-}
-
-private fun downloadApk(
-    context: Context,
-    downloadUrl: String,
-    onProgress: (Float, Long, Long) -> Unit
-): File {
-    var targetUrl = downloadUrl
-    var connection = URL(targetUrl).openConnection() as HttpURLConnection
-    connection.requestMethod = "GET"
-    connection.setRequestProperty("User-Agent", "IRBlaster-App")
-    connection.connectTimeout = 15000
-    connection.readTimeout = 15000
-    connection.instanceFollowRedirects = true
-
-    var status = connection.responseCode
-    if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-        val newUrl = connection.getHeaderField("Location")
-        if (!newUrl.isNullOrBlank()) {
-            connection.disconnect()
-            connection = URL(newUrl).openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("User-Agent", "IRBlaster-App")
-            connection.connectTimeout = 15000
-            connection.readTimeout = 15000
-            status = connection.responseCode
-        }
-    }
-
-    if (status != HttpURLConnection.HTTP_OK) {
-        throw RuntimeException("Ошибка сервера: $status")
-    }
-
-    val fileLength = connection.contentLength.toLong()
-    val apkFile = File(context.cacheDir, "IRBlaster_update.apk")
-    if (apkFile.exists()) {
-        apkFile.delete()
-    }
-
-    val input = BufferedInputStream(connection.inputStream)
-    val output = FileOutputStream(apkFile)
-    val buffer = ByteArray(8192)
-    var totalRead = 0L
-    var count: Int
-
-    while (input.read(buffer).also { count = it } != -1) {
-        totalRead += count
-        output.write(buffer, 0, count)
-        if (fileLength > 0) {
-            onProgress(totalRead.toFloat() / fileLength.toFloat(), totalRead, fileLength)
-        } else {
-            onProgress(0.5f, totalRead, 0L)
-        }
-    }
-
-    output.flush()
-    output.close()
-    input.close()
-    connection.disconnect()
-
-    return apkFile
-}
-
-private fun installApk(context: Context, apkFile: File) {
-    val uri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        apkFile
-    )
-
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.android.package-archive")
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-    }
-
-    context.startActivity(intent)
-}
-
-private fun compareVersions(v1: String, v2: String): Int {
-    try {
-        val p1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
-        val p2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
-
-        val maxLen = maxOf(p1.size, p2.size)
-        for (i in 0 until maxLen) {
-            val c1 = if (i < p1.size) p1[i] else 0
-            val c2 = if (i < p2.size) p2[i] else 0
-            if (c1 > c2) return 1
-            if (c1 < c2) return -1
-        }
-        return 0
-    } catch (e: Exception) {
-        return v1.compareTo(v2)
-    }
-}
-
-private fun isVersionNewer(current: String, latest: String): Boolean {
-    return compareVersions(latest, current) > 0
 }
