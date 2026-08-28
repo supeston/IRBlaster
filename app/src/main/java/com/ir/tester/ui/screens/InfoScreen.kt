@@ -25,6 +25,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.History
@@ -47,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,7 +78,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-const val CURRENT_APP_VERSION = "2.1.0"
+const val CURRENT_APP_VERSION = "2.1.1"
 
 data class ReleaseHistoryItem(
     val tagName: String,
@@ -97,6 +100,7 @@ fun InfoScreen() {
     var checkResult by remember { mutableStateOf<String?>(null) }
     var releasesList by remember { mutableStateOf<List<ReleaseHistoryItem>>(emptyList()) }
     var isLoadingReleases by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
 
     var downloadingTag by remember { mutableStateOf<String?>(null) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
@@ -104,6 +108,10 @@ fun InfoScreen() {
     var totalBytes by remember { mutableLongStateOf(0L) }
     var downloadError by remember { mutableStateOf<String?>(null) }
     var showDowngradeDialogFor by remember { mutableStateOf<ReleaseHistoryItem?>(null) }
+
+    val pageSize = 10
+    val totalPages = if (releasesList.isNotEmpty()) (releasesList.size + pageSize - 1) / pageSize else 1
+    val pagedReleases = releasesList.drop(currentPage * pageSize).take(pageSize)
 
     fun loadAllReleases() {
         isLoadingReleases = true
@@ -113,6 +121,7 @@ fun InfoScreen() {
                     fetchAllReleases()
                 }
                 releasesList = list
+                currentPage = 0
                 isLoadingReleases = false
             } catch (e: Exception) {
                 isLoadingReleases = false
@@ -235,6 +244,7 @@ fun InfoScreen() {
                                 fetchAllReleases()
                             }
                             releasesList = list
+                            currentPage = 0
                             isChecking = false
 
                             val latest = list.firstOrNull()
@@ -328,7 +338,7 @@ fun InfoScreen() {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "история версий и ченжлоги:",
+                        text = "история версий (${releasesList.size}):",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -350,7 +360,7 @@ fun InfoScreen() {
                 )
             }
         } else {
-            items(releasesList) { item ->
+            items(pagedReleases) { item ->
                 val isDownloadingThis = downloadingTag == item.tagName
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -460,6 +470,53 @@ fun InfoScreen() {
                                     Text("скачать ${item.tagName} (старая)", fontWeight = FontWeight.Bold)
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            if (totalPages > 1) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = { if (currentPage > 0) currentPage-- },
+                            enabled = currentPage > 0,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("назад", fontWeight = FontWeight.Bold)
+                        }
+
+                        Text(
+                            text = "${currentPage + 1} / $totalPages",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        OutlinedButton(
+                            onClick = { if (currentPage < totalPages - 1) currentPage++ },
+                            enabled = currentPage < totalPages - 1,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("вперед", fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
